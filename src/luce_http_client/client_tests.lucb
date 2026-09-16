@@ -1,0 +1,31 @@
+import http_client
+import net
+
+pub func main(arguments: str[]) -> i32!:
+    if arguments.length < 2: return 2
+    let port = arguments[1]
+    var digits: u16
+    var i: usize
+    while i < port.length:
+        let c = port.bytes[i]
+        if c < '0' or c > '9': return 2
+        digits = digits * 10 + (u16)(c - '0')
+        i += 1
+    var body: u8[4096]
+    let hello = try http_client.get(digits, "/hello", body)
+    assert(hello.status == 200)
+    assert(hello.count == 5)
+    assert(body[0] == 'h' and body[1] == 'e' and body[2] == 'l' and body[3] == 'l' and body[4] == 'o')
+    let echoed = try http_client.post(digits, "/echo", b"ping-body", body)
+    assert(echoed.status == 200)
+    assert(echoed.count == 9)
+    var extras: net.HttpField[2]
+    extras[0] = net.HttpField(name = "Authorization", value = "Bearer secret")
+    extras[1] = net.HttpField(name = "X-Forwarded-For", value = "8.8.8.8")
+    let headers = try http_client.request(net.SocketAddress.loopback(digits), "GET", "/headers",
+        "127.0.0.1", extras, 2, b"", body)
+    assert(headers.status == 200)
+    let text = (str)body[..<headers.count]
+    assert(text == "Authorization=Bearer secret\nX-Forwarded-For=8.8.8.8\n")
+    print("PASS HTTP/1.1 GET POST and header round-trip")
+    return 0

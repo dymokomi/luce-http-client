@@ -1,0 +1,6 @@
+[package]
+name = "luce_http_client"
+source = "src"
+
+[exports]
+http_client = "luce_http_client.client"

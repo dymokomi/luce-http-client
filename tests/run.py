@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Build the native client and talk to an independent Python HTTP origin."""
+import argparse
+import os
+from pathlib import Path
+import subprocess
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+MODES = {f"native{i}": ["--native", "--opt", str(i)] for i in range(4)}
+MODES.update({"c": ["--backend=c"], "c-release": ["--backend=c", "--release"]})
+SOURCES = [("src/luce_http_client/client_tests.lucb", "client-tests")]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=[*MODES, "all"], default="all")
+    parser.add_argument("--base", type=Path, default=ROOT / "build/toolchain/luce-base")
+    args = parser.parse_args()
+    if not args.base.is_file():
+        raise SystemExit("Run python3 tools/bootstrap.py first")
+    environment = dict(os.environ, LUCE_BASE=str(args.base.resolve()))
+    def run(command):
+        subprocess.run([str(a) for a in command], cwd=ROOT, env=environment, check=True, timeout=120)
+    origin = subprocess.Popen([os.environ.get("PYTHON", "python3"), str(ROOT / "tests/origin.py")],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        port = origin.stdout.readline().strip()
+        assert port.isdigit(), port
+        for mode, flags in MODES.items():
+            if args.mode not in (mode, "all"): continue
+            output = ROOT / "build" / mode
+            output.mkdir(parents=True, exist_ok=True)
+            print(f"MODE {mode}", flush=True)
+            for source, name in SOURCES:
+                run([args.base.resolve(), "build", ROOT / source, *flags, "-o", output / name])
+                run([output / name, port])
+            print(f"PASS {mode}", flush=True)
+        print("PASS all selected compiler modes", flush=True)
+    finally:
+        origin.terminate()
+        try:
+            origin.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            origin.kill()
+
+
+if __name__ == "__main__":
+    main()
