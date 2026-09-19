@@ -3,6 +3,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import sys
 import time
+from pathlib import Path
 
 
 class Origin(BaseHTTPRequestHandler):
@@ -10,6 +11,32 @@ class Origin(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path.startswith('/large-') or self.path == '/bootstrap':
+            self.close_connection = True
+            try:
+                if self.path == '/bootstrap':
+                    source = Path(__file__).resolve().parents[2] / 'luce-base/bootstrap/luce-base-arm64-macos.c'
+                    body = source.read_bytes()
+                    self.wfile.write(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n\r\n' + body)
+                    return
+                total = 67108864 if self.path == '/large-max' else 17825795
+                chunked = self.path == '/large-chunked'
+                head = b'HTTP/1.1 200 OK\r\nConnection: close\r\n'
+                if chunked: head += b'Transfer-Encoding: chunked\r\n'
+                elif self.path != '/large-eof': head += b'Content-Length: ' + str(total).encode() + b'\r\n'
+                self.wfile.write(head + b'\r\n')
+                block = bytes(range(251)) * 261
+                remaining = total
+                while remaining:
+                    part = block[:min(remaining, len(block))]
+                    if chunked: self.wfile.write(f'{len(part):x}\r\n'.encode())
+                    self.wfile.write(part)
+                    if chunked: self.wfile.write(b'\r\n')
+                    remaining -= len(part)
+                if chunked: self.wfile.write(b'0\r\n\r\n')
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         if self.path in ('/stall', '/drip'):
             self.close_connection = True
             try:

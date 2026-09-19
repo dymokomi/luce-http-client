@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODES = {f"native{i}": ["--native", "--opt", str(i)] for i in range(4)}
 MODES.update({"c": ["--backend=c"], "c-release": ["--backend=c", "--release"]})
 SOURCES = [("src/luce_http_client/client_tests.lucb", "client-tests"),
+           ("src/luce_http_client/large_tests.lucb", "large-tests"),
            ("src/luce_http_client/framing_tests.lucb", "framing-tests"),
            ("src/luce_http_client/secure_tests.lucb", "secure-tests")]
 

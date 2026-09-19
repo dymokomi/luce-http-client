@@ -1,0 +1,44 @@
+import http_client
+import memory
+import files
+
+pub func main(arguments: str[]) -> i32!:
+    assert(arguments.length == 2)
+    var port: u16
+    for byte in arguments[1].bytes:
+        assert(byte >= '0' and byte <= '9')
+        port = port * 10 + (u16)(byte - '0')
+    let buffer = try alloc u8[http_client.max_response + 1] in memory.heap
+    defer free(buffer) in memory.heap
+    # Reject a larger output capacity before trying to connect.
+    var rejected = false
+    discard(http_client.get(0, "/hello", buffer) catch failure:
+        assert(failure.code == http_client.limit_exceeded)
+        rejected = true
+        recover http_client.Result())
+    assert(rejected)
+    let output = buffer[..<http_client.max_response]
+    for target in ["/large-fixed", "/large-chunked", "/large-eof", "/large-max"]:
+        let response = try http_client.get(port, target, output)
+        let count: usize = 67108864 if target == "/large-max" else 17825795
+        assert(response.status == 200 and response.count == count)
+        for i in 0..<count: assert(output[i] == (u8)(i % 251))
+    # A caller's smaller buffer stays a hard limit in every framing mode.
+    for target in ["/large-fixed", "/large-chunked", "/large-eof"]:
+        rejected = false
+        discard(http_client.get(port, target, output[..<4096]) catch failure:
+            assert(failure.code == http_client.limit_exceeded)
+            rejected = true
+            recover http_client.Result())
+        assert(rejected)
+    let source = try files.read_limit("../luce-base/bootstrap/luce-base-arm64-macos.c", 33554432)
+    defer free(source) in memory.heap
+    assert(source.length > 1048576)
+    let downloaded = try http_client.get(port, "/bootstrap", output)
+    assert(downloaded.status == 200 and downloaded.count == source.length)
+    for i in 0..<source.length: assert(output[i] == source[i])
+    let uploaded = try http_client.post(port, "/echo", source, output)
+    assert(uploaded.status == 200 and uploaded.count == source.length)
+    for i in 0..<source.length: assert(output[i] == source[i])
+    print("PASS large HTTP framing, exact capacity, rejection, bootstrap upload/download")
+    return 0
