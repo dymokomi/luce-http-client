@@ -8,3 +8,4 @@ https = "luce_http_client.secure"
 
 [dependencies]
 luce_tls = "../luce-tls"
+luce_crypto = "../luce-crypto"

@@ -7,10 +7,13 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "build" / "toolchain"
+ENV = dict(os.environ)
+ENV.setdefault("LUCE_STD", str(ROOT.parent / "luce-base/src/std"))
+ENV.setdefault("LUCE_CACHE", str(ROOT / "build/cache"))
 
 
 def run(args):
-    subprocess.run([str(arg) for arg in args], cwd=ROOT, check=True, timeout=180)
+    subprocess.run([str(arg) for arg in args], cwd=ROOT, env=ENV, check=True, timeout=600)
 
 
 def main():
@@ -20,7 +23,8 @@ def main():
             ("Linux", "x86_64"): "x86_64-linux"}.get((platform.system(), platform.machine()))
     if not host:
         raise SystemExit("Use explicit compiler paths on this platform.")
-    for source, pin in ((base, "BASE"), (luce, "LUCE")):
+    crypto = ROOT.parent / "luce-crypto"
+    for source, pin in ((base, "BASE"), (luce, "LUCE"), (crypto, "CRYPTO"), (ROOT.parent / "luce-tls", "TLS")):
         expected = (ROOT / "bootstrap" / pin).read_text().strip()
         actual = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
         if subprocess.check_output(["git", "-C", str(source), "status", "--porcelain"]):

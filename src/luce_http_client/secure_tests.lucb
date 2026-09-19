@@ -1,0 +1,75 @@
+## Ephemeral pinned-issuer TLS loopback; not public-CA or independent TLS interop.
+import https
+import session as tls
+import x509
+import crypto_native
+import net
+import thread
+import c
+
+var private_key: u8[32]
+var public_x: u8[32]
+var public_y: u8[32]
+var certificate: u8[2048]
+var certificate_length: usize
+var port: @u64
+var ready: @u64
+var succeeded: @u64
+
+func serve() -> !:
+    var listener = try net.Listener.bind(try net.resolve((c.str)"localhost", 0))
+    defer discard(listener.close() catch: recover ())
+    port.store((u64)(try listener.address()).port, .release)
+    ready.store(1, .release)
+    for attempt in 0..<2:
+        var conn = try listener.accept()
+        defer discard(conn.close() catch: recover ())
+        var secrets = tls.Secrets()
+        try tls.accept(&conn, "localhost", certificate[..<certificate_length], private_key, public_x, public_y, &secrets)
+        var input: u8[16640]
+        let n = try tls.receive(&conn, &secrets, input)
+        assert(n > 0)
+        if attempt == 0:
+            # One HTTP message fragmented across separate authenticated TLS records.
+            try tls.send(&conn, &secrets, b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r")
+            try tls.send(&conn, &secrets, b"\nhe\r\n3\r\nllo\r\n0\r\n\r\n")
+        else:
+            try tls.send(&conn, &secrets, b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nZ\r\n")
+    succeeded.store(1, .release)
+
+func worker(raw: void*?):
+    discard(raw)
+    serve() catch failure:
+        print(failure.message)
+        ready.store(2, .release)
+
+func join_pending(task: thread.Handle*, joined: bool*):
+    if not *joined: discard(task.join() catch: recover ())
+
+pub func main(arguments: str[]) -> i32!:
+    discard(arguments)
+    try crypto_native.ecdsa_p256_keygen(private_key, public_x, public_y)
+    defer crypto_native.wipe(private_key)
+    certificate_length = try x509.mint_self_signed("localhost", private_key, public_x, public_y, certificate)
+    var task = try thread.spawn(worker, none, name = "https-test")
+    var joined = false
+    defer join_pending(&task, &joined)
+    var spins: usize = 0
+    while ready.load(.acquire) == 0 and spins < 500:
+        thread.sleep(10)
+        spins += 1
+    assert(ready.load(.acquire) == 1)
+    var output: u8[16]
+    let result = try https.fetch("localhost", (u16)port.load(.acquire), public_x, public_y, "GET", "/", "", "", b"", output)
+    assert(result.status == 200 and result.length == 5 and (str)output[..<5] == "hello")
+    var rejected = false
+    discard(https.fetch("localhost", (u16)port.load(.acquire), public_x, public_y, "GET", "/", "", "", b"", output) catch failure:
+        assert(failure.code == net.http_invalid)
+        rejected = true
+        recover https.Response())
+    assert(rejected)
+    try task.join()
+    joined = true
+    assert(succeeded.load(.acquire) == 1)
+    print("PASS HTTPS loopback: fragmented TLS records and malformed chunk rejection")
+    return 0

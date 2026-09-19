@@ -1,0 +1,58 @@
+## Shared bounded response framing, independent of socket/TLS record boundaries.
+import net
+
+pub struct Decoder:
+    var head: u8[32768]
+    var used: usize
+    var ready: bool
+    var interim: usize
+    var body: net.HttpBodyDecoder
+    pub var status: u16
+    pub var count: usize
+
+    pub static func create() -> Decoder!:
+        return Decoder(body = try net.HttpBodyDecoder.create(net.HttpBodyKind.empty))
+
+    pub func finished() -> bool:
+        return self.ready and self.body.finished()
+
+    ## Output must be the same buffer across calls. Discard all output on failure.
+    pub mutating func consume(data: const u8[], output: u8[], method: str) -> !:
+        var at: usize = 0
+        while at < data.length:
+            if not self.ready:
+                if self.used == self.head.length:
+                    error(net.http_limit, "HTTP response head exceeds its byte limit")
+                self.head[self.used] = data[at]
+                self.used += 1
+                at += 1
+                if self.used < 4: continue
+                let n = self.used
+                if self.head[n - 4] != '\r' or self.head[n - 3] != '\n' or self.head[n - 2] != '\r' or self.head[n - 1] != '\n': continue
+                var fields: net.HttpField[100]
+                let response = try net.http_parse_response(self.head[..<n], fields, method)
+                if response.status >= 100 and response.status < 200:
+                    self.interim += 1
+                    if response.status == 101 or self.interim > 8:
+                        error(net.http_unsupported, "HTTP upgrade or too many interim responses")
+                    self.used = 0
+                    continue
+                self.status = response.status
+                self.body = try net.HttpBodyDecoder.create(response.body_kind, response.body_length, (u64)output.length)
+                self.ready = true
+            else:
+                if self.body.finished():
+                    error(net.http_invalid, "bytes after the HTTP response")
+                let step = try self.body.consume(data[at..])
+                if step.consumed == 0:
+                    error(net.http_invalid, "HTTP body decoder made no progress")
+                if self.count > output.length or step.body.length > output.length - self.count:
+                    error(net.http_limit, "HTTP response exceeds output buffer")
+                for i in 0..<step.body.length:
+                    output[self.count + i] = step.body[i]
+                self.count += step.body.length
+                at += step.consumed
+
+    pub mutating func finish() -> !:
+        if not self.ready: error(net.http_invalid, "incomplete HTTP response head")
+        try self.body.finish()

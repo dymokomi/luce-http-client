@@ -27,5 +27,16 @@ pub func main(arguments: str[]) -> i32!:
     assert(headers.status == 200)
     let text = (str)body[..<headers.count]
     assert(text == "Authorization=Bearer secret\nX-Forwarded-For=8.8.8.8\n")
+    for target in ["/chunked", "/eof"]:
+        let response = try http_client.get(digits, target, body)
+        assert(response.status == 200 and response.count == 5)
+        assert((str)body[..<response.count] == "hello")
+    for target in ["/truncated", "/bad-chunk", "/oversized"]:
+        var rejected = false
+        discard(http_client.get(digits, target, body) catch failure:
+            discard(failure)
+            rejected = true
+            recover http_client.Result())
+        assert(rejected)
     print("PASS HTTP/1.1 GET POST and header round-trip")
     return 0

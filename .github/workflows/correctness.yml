@@ -23,6 +23,8 @@ jobs:
         run: |
           echo "base=$(tr -d '\n' < luce-http-client/bootstrap/BASE)" >> "$GITHUB_OUTPUT"
           echo "luce=$(tr -d '\n' < luce-http-client/bootstrap/LUCE)" >> "$GITHUB_OUTPUT"
+          echo "crypto=$(tr -d '\n' < luce-http-client/bootstrap/CRYPTO)" >> "$GITHUB_OUTPUT"
+          echo "tls=$(tr -d '\n' < luce-http-client/bootstrap/TLS)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: dymokomi/luce-base
@@ -36,6 +38,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-crypto
+          ref: ${{ steps.pins.outputs.crypto }}
+          path: luce-crypto
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-tls
+          ref: ${{ steps.pins.outputs.tls }}
+          path: luce-tls
       - name: Bootstrap without language source changes
         working-directory: luce-http-client
         run: python3 tools/bootstrap.py

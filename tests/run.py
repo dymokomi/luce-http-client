@@ -9,7 +9,9 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 MODES = {f"native{i}": ["--native", "--opt", str(i)] for i in range(4)}
 MODES.update({"c": ["--backend=c"], "c-release": ["--backend=c", "--release"]})
-SOURCES = [("src/luce_http_client/client_tests.lucb", "client-tests")]
+SOURCES = [("src/luce_http_client/client_tests.lucb", "client-tests"),
+           ("src/luce_http_client/framing_tests.lucb", "framing-tests"),
+           ("src/luce_http_client/secure_tests.lucb", "secure-tests")]
 
 
 def main():
@@ -20,6 +22,8 @@ def main():
     if not args.base.is_file():
         raise SystemExit("Run python3 tools/bootstrap.py first")
     environment = dict(os.environ, LUCE_BASE=str(args.base.resolve()))
+    environment.setdefault("LUCE_STD", str(ROOT.parent / "luce-base/src/std"))
+    environment.setdefault("LUCE_CACHE", str(ROOT / "build/cache"))
     def run(command):
         subprocess.run([str(a) for a in command], cwd=ROOT, env=environment, check=True, timeout=120)
     origin = subprocess.Popen([os.environ.get("PYTHON", "python3"), str(ROOT / "tests/origin.py")],
@@ -43,6 +47,7 @@ def main():
             origin.wait(timeout=5)
         except subprocess.TimeoutExpired:
             origin.kill()
+            origin.wait(timeout=5)
 
 
 if __name__ == "__main__":

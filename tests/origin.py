@@ -2,6 +2,7 @@
 """Independent cleartext HTTP origin for the native client."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import sys
+import time
 
 
 class Origin(BaseHTTPRequestHandler):
@@ -9,6 +10,23 @@ class Origin(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        raw = {
+            '/chunked': b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhe\r\n3\r\nllo\r\n0\r\n\r\n',
+            '/eof': b'HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello',
+            '/truncated': b'HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nhello',
+            '/bad-chunk': b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX',
+            '/oversized': b'HTTP/1.1 200 OK\r\nContent-Length: 4097\r\n\r\n',
+        }
+        if self.path in raw:
+            self.close_connection = True
+            try:
+                for byte in raw[self.path]:
+                    self.wfile.write(bytes([byte]))
+                    self.wfile.flush()
+                    time.sleep(0.001)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Rejection can close the client before the fixture finishes.
+            return
         if self.path == "/hello":
             body = b"hello"
         elif self.path == "/headers":

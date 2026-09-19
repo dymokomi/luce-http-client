@@ -1,158 +1,47 @@
-## HTTPS/1.1 over the native TLS 1.3 client: connect, send one request, read the
-## whole response, and return the status with a de-chunked body. The connection is
-## closed after the response (Connection: close), so this is request/response, not
-## a keep-alive pool. Certificate trust is a pinned issuer key, as in luce-tls.
+## HTTP/1.1 over native TLS with explicitly pinned issuer trust; no public CA store.
 import session as tls
 import net
+import luce_http_client.framing as framing
 
-pub let invalid = tls.invalid
+pub let invalid = net.http_invalid
 
 pub struct Response:
     pub var status: u16
     pub var length: usize
 
-func put_str(buf: u8[], pos: usize*, s: str):
-    for i in 0..<s.length:
-        buf[*pos + i] = s.bytes[i]
-    *pos += s.length
-
-func put_decimal(buf: u8[], pos: usize*, n: usize):
-    if n >= 10:
-        put_decimal(buf, pos, n // 10)
-    buf[*pos] = (u8)(48 + n % 10)
-    *pos += 1
-
-func find(hay: const u8[], start: usize, needle: const u8[]) -> usize:
-    var i = start
-    while i + needle.length <= hay.length:
-        var hit = true
-        for j in 0..<needle.length:
-            if hay[i + j] != needle[j]:
-                hit = false
-                break
-        if hit:
-            return i
-        i += 1
-    return hay.length
-
-func lower(c: u8) -> u8:
-    return c + 32 if c >= 65 and c <= 90 else c
-
-## Case-insensitive contains, for header inspection.
-func contains_ci(hay: const u8[], needle: const u8[]) -> bool:
-    if needle.length == 0 or needle.length > hay.length:
-        return false
-    var i: usize = 0
-    while i + needle.length <= hay.length:
-        var hit = true
-        for j in 0..<needle.length:
-            if lower(hay[i + j]) != lower(needle[j]):
-                hit = false
-                break
-        if hit:
-            return true
-        i += 1
-    return false
-
-func parse_hex(buf: const u8[], start: usize, end: usize) -> usize:
-    var value: usize = 0
-    for i in start..<end:
-        let c = buf[i]
-        var digit: usize = 0
-        if c >= 48 and c <= 57:
-            digit = (usize)(c - 48)
-        elif c >= 97 and c <= 102:
-            digit = (usize)(c - 87)
-        elif c >= 65 and c <= 70:
-            digit = (usize)(c - 55)
-        else:
-            break
-        value = value * 16 + digit
-    return value
-
-## Decode a chunked transfer-encoded body from `src` into `out`, returning length.
-func dechunk(src: const u8[], out: u8[]) -> usize!:
-    var pos: usize = 0
-    var written: usize = 0
-    while pos < src.length:
-        let line_end = find(src, pos, b"\r\n")
-        if line_end >= src.length:
-            break
-        let size = parse_hex(src, pos, line_end)
-        pos = line_end + 2
-        if size == 0:
-            break
-        if pos + size > src.length or written + size > out.length:
-            error(invalid, "malformed or oversized chunked body")
-        for i in 0..<size:
-            out[written + i] = src[pos + i]
-        written += size
-        pos += size + 2
-    return written
-
-## Perform one HTTPS request. `authorization` and `content_type` are omitted when
-## empty. The response body is written to `output`; `Response.length` is its size.
+## One bounded request; output is untrusted and must be discarded on any error.
 pub func fetch(host: str, port: u16, issuer_x: const u8[], issuer_y: const u8[],
                method: str, target: str, authorization: str, content_type: str,
                body: const u8[], output: u8[]) -> Response!:
     var request: u8[8192]
-    var rp: usize = 0
-    put_str(request, &rp, method)
-    put_str(request, &rp, " ")
-    put_str(request, &rp, target)
-    put_str(request, &rp, " HTTP/1.1\r\nHost: ")
-    put_str(request, &rp, host)
-    put_str(request, &rp, "\r\nConnection: close\r\n")
+    var fields: net.HttpField[3]
+    var count: usize = 1
+    fields[0] = net.HttpField(name = "Host", value = host)
     if authorization.length > 0:
-        put_str(request, &rp, "Authorization: ")
-        put_str(request, &rp, authorization)
-        put_str(request, &rp, "\r\n")
+        fields[count] = net.HttpField(name = "Authorization", value = authorization)
+        count += 1
+    if content_type.length > 0:
+        fields[count] = net.HttpField(name = "Content-Type", value = content_type)
+        count += 1
+    var head = net.HttpHead(method = method, target = target, version = "HTTP/1.1", fields = fields[..<count], keep_alive = false)
     if body.length > 0:
-        if content_type.length > 0:
-            put_str(request, &rp, "Content-Type: ")
-            put_str(request, &rp, content_type)
-            put_str(request, &rp, "\r\n")
-        put_str(request, &rp, "Content-Length: ")
-        put_decimal(request, &rp, body.length)
-        put_str(request, &rp, "\r\n")
-        if rp + 2 + body.length > request.length:
-            error(invalid, "request larger than the request buffer")
-    put_str(request, &rp, "\r\n")
-    for i in 0..<body.length:
-        request[rp + i] = body[i]
-    rp += body.length
+        head.body_kind = net.HttpBodyKind.fixed
+        head.body_length = (u64)body.length
+    let encoded = try net.http_encode_head(request, head)
     var secrets = tls.Secrets()
     var conn = try tls.connect(host, port, issuer_x, issuer_y, &secrets)
-    try tls.send(&conn, &secrets, request[..<rp])
-    var response: u8[262144]
-    var used: usize = 0
-    while used + 16640 <= response.length:
-        var chunk: u8[16640]
-        let n = try tls.receive(&conn, &secrets, chunk)
-        if n == 0:
-            break
-        for i in 0..<n:
-            response[used + i] = chunk[i]
-        used += n
-    discard(conn.close() catch failure: recover ())
-    # Status code from the first line.
-    var space = find(response[..<used], 0, b" ")
-    var status: u16 = 0
-    if space + 4 <= used:
-        status = (u16)((usize)(response[space + 1] - 48) * 100 + (usize)(response[space + 2] - 48) * 10 + (usize)(response[space + 3] - 48))
-    # Split head and body.
-    let head_end = find(response[..<used], 0, b"\r\n\r\n")
-    if head_end >= used:
-        error(invalid, "incomplete HTTP response head")
-    let body_start = head_end + 4
-    let chunked = contains_ci(response[..<head_end], b"transfer-encoding: chunked")
-    var length: usize = 0
-    if chunked:
-        length = try dechunk(response[body_start..<used], output)
-    else:
-        length = used - body_start
-        if length > output.length:
-            error(invalid, "response body larger than the output buffer")
-        for i in 0..<length:
-            output[i] = response[body_start + i]
-    return Response(status = status, length = length)
+    defer discard(conn.close() catch: recover ())
+    try tls.send(&conn, &secrets, encoded)
+    var sent: usize = 0
+    while sent < body.length:
+        let size = 16384 if body.length - sent > 16384 else body.length - sent
+        try tls.send(&conn, &secrets, body[sent..<sent + size])
+        sent += size
+    var response = try framing.Decoder.create()
+    var incoming: u8[16640]
+    while not response.finished():
+        let got = try tls.receive(&conn, &secrets, incoming)
+        if got == 0: break
+        try response.consume(incoming[..<got], output, method)
+    try response.finish()
+    return Response(status = response.status, length = response.count)

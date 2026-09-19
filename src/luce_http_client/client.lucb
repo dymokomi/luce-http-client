@@ -2,6 +2,7 @@
 import io
 import memory
 import net
+import luce_http_client.framing as framing
 
 pub let invalid = net.http_invalid
 pub let limit_exceeded = net.http_limit
@@ -37,28 +38,14 @@ pub func request(address: net.SocketAddress, method: str, target: str, host: str
     try io.write_all(&conn, encoded)
     if body.length > 0: try io.write_all(&conn, body)
     try conn.shutdown(net.ShutdownDirection.write)
-    var incoming: u8[65536]
-    var used: usize
-    while used < incoming.length:
-        let got = try conn.read(incoming[used..])
+    var incoming: u8[16384]
+    var response = try framing.Decoder.create()
+    while not response.finished():
+        let got = try conn.read(incoming)
         if got == 0: break
-        used += got
-        if net.http_head_end(incoming[..<used]) != none: break
-    let end = net.http_head_end(incoming[..<used]) else error(invalid, "incomplete HTTP response head")
-    var parsed: net.HttpField[32]
-    let response = try net.http_parse_response(incoming[..<end], parsed, method)
-    var take = used - end
-    if take > output.length: error(limit_exceeded, "HTTP response body is larger than the output buffer")
-    for i in 0..<take: output[i] = incoming[end + i]
-    if response.body_kind == net.HttpBodyKind.fixed:
-        let need = (usize)response.body_length
-        if need > output.length: error(limit_exceeded, "HTTP response body is larger than the output buffer")
-        while take < need:
-            let got = try conn.read(output[take..<need])
-            if got == 0: error(invalid, "truncated HTTP response body")
-            take += got
-        return Result(status = response.status, count = need)
-    return Result(status = response.status, count = take)
+        try response.consume(incoming[..<got], output, method)
+    try response.finish()
+    return Result(status = response.status, count = response.count)
 
 pub func get(port: u16, target: str, output: u8[]) -> Result!:
     var unused: net.HttpField[1]
