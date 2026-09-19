@@ -4,3 +4,7 @@ source = "src"
 
 [exports]
 http_client = "luce_http_client.client"
+https = "luce_http_client.secure"
+
+[dependencies]
+luce_tls = "../luce-tls"
