@@ -10,6 +10,20 @@ class Origin(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path in ('/stall', '/drip'):
+            self.close_connection = True
+            try:
+                if self.path == '/stall':
+                    time.sleep(1)
+                else:
+                    # Continuous progress must not reset the request deadline.
+                    for byte in b'HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello':
+                        self.wfile.write(bytes([byte]))
+                        self.wfile.flush()
+                        time.sleep(.04)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         raw = {
             '/chunked': b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhe\r\n3\r\nllo\r\n0\r\n\r\n',
             '/eof': b'HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello',

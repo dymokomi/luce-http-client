@@ -5,6 +5,15 @@ Cleartext requests use numeric IPv4 addresses. The `https` export uses native
 TLS 1.3 with an explicitly supplied P-256 issuer pin; this is **not** general
 public-CA trust, and there is no redirect handling or connection pool.
 
+Cleartext `request`, `get` and `post` accept `timeout_ms` (default 30000) and an
+optional borrowed `net.Cancellation*`. One absolute deadline covers connection,
+request writes and response reads; partial progress does not restart it. Zero
+means an immediate deadline; overflowing durations are rejected. Operations use
+the pinned standard library's nonblocking connection/deadline stream. Keep any
+cancellation object alive until the call returns. Timeout/cancellation closes
+the connection and is an error, never partial success; discard the output buffer.
+These options do **not** yet apply to the separate HTTPS/TLS path.
+
 Both clients use one bounded incremental response decoder over the standard
 library HTTP framing APIs. It handles fixed length, chunked (including validated
 trailers), EOF-delimited and up to eight interim responses. Malformed framing,
@@ -21,6 +30,8 @@ interoperability still require further audit before production package downloads
 
 Tests cover every fixed/chunked fixture truncation, fragmentation sizes, malformed
 lengths/chunks/trailers, request injection, and independent Python socket framing.
+Cleartext tests also cover silent and continuously dripping peers, zero/overflow
+timeouts, pre-request/in-flight cancellation, and successful requests afterward.
 The native HTTPS fixture uses ephemeral test credentials; it is not independent
 TLS interoperability evidence. All fixtures run in six compiler modes and under
 ASan/UBSan. No language sources are changed.

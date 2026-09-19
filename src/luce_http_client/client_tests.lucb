@@ -1,5 +1,13 @@
 import http_client
 import net
+import thread
+
+var cancellation: net.Cancellation
+
+func cancel_later(raw: void*?):
+    discard(raw)
+    thread.sleep(80)
+    cancellation.request()
 
 pub func main(arguments: str[]) -> i32!:
     if arguments.length < 2: return 2
@@ -38,5 +46,40 @@ pub func main(arguments: str[]) -> i32!:
             rejected = true
             recover http_client.Result())
         assert(rejected)
-    print("PASS HTTP/1.1 GET POST and header round-trip")
+    for target in ["/stall", "/drip"]:
+        var timed_out = false
+        discard(http_client.get(digits, target, body, timeout_ms = 150) catch failure:
+            assert(failure.code == net.timed_out)
+            timed_out = true
+            recover http_client.Result())
+        assert(timed_out)
+    var immediate = false
+    discard(http_client.get(digits, "/hello", body, timeout_ms = 0) catch failure:
+        assert(failure.code == net.timed_out)
+        immediate = true
+        recover http_client.Result())
+    assert(immediate)
+    var overflow = false
+    discard(http_client.get(digits, "/hello", body, timeout_ms = 18446744073709551615) catch failure:
+        assert(failure.code == net.invalid_options)
+        overflow = true
+        recover http_client.Result())
+    assert(overflow)
+    var worker = try thread.spawn(cancel_later, none, name = "http-cancel")
+    var cancelled = false
+    discard(http_client.get(digits, "/stall", body, cancellation = &cancellation) catch failure:
+        assert(failure.code == net.cancelled)
+        cancelled = true
+        recover http_client.Result())
+    try worker.join()
+    assert(cancelled)
+    var precancelled = false
+    discard(http_client.get(digits, "/hello", body, cancellation = &cancellation) catch failure:
+        assert(failure.code == net.cancelled)
+        precancelled = true
+        recover http_client.Result())
+    assert(precancelled)
+    let after = try http_client.get(digits, "/hello", body)
+    assert(after.status == 200 and after.count == 5)
+    print("PASS HTTP/1.1 round-trip, absolute deadline, slow progress, cancellation and recovery")
     return 0
