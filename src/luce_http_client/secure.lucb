@@ -1,4 +1,5 @@
-## HTTP/1.1 over native TLS with explicitly pinned issuer trust; no public CA store.
+## HTTP/1.1 over native TLS with either private issuer pinning or the strict
+## public ISRG Root X2 certificate-chain profile.
 import session as tls
 import net
 import luce_http_client.framing as framing
@@ -9,11 +10,9 @@ pub struct Response:
     pub var status: u16
     pub var length: usize
 
-## One bounded request; output is untrusted and must be discarded on any error.
-pub func fetch(host: str, port: u16, issuer_x: const u8[], issuer_y: const u8[],
-               method: str, target: str, authorization: str, content_type: str,
-               body: const u8[], output: u8[]) -> Response!:
-    var request: u8[8192]
+## Encode and validate the complete request head before DNS or network I/O.
+func encode_request(request: u8[], host: str, method: str, target: str,
+                    authorization: str, content_type: str, body: const u8[]) -> usize!:
     var fields: net.HttpField[3]
     var count: usize = 1
     fields[0] = net.HttpField(name = "Host", value = host)
@@ -28,20 +27,57 @@ pub func fetch(host: str, port: u16, issuer_x: const u8[], issuer_y: const u8[],
         head.body_kind = net.HttpBodyKind.fixed
         head.body_length = (u64)body.length
     let encoded = try net.http_encode_head(request, head)
-    var secrets = tls.Secrets()
-    var conn = try tls.connect(host, port, issuer_x, issuer_y, &secrets)
-    defer discard(conn.close() catch: recover ())
-    try tls.send(&conn, &secrets, encoded)
+    return encoded.length
+
+## Send and decode one request over an already-authenticated TLS connection.
+## `output` remains untrusted and must be discarded on any error.
+func exchange(conn: net.Connection*, secrets: tls.Secrets*, encoded: const u8[],
+              method: str, body: const u8[], output: u8[]) -> Response!:
+    try tls.send(conn, secrets, encoded)
     var sent: usize = 0
     while sent < body.length:
         let size = 16384 if body.length - sent > 16384 else body.length - sent
-        try tls.send(&conn, &secrets, body[sent..<sent + size])
+        try tls.send(conn, secrets, body[sent..<sent + size])
         sent += size
     var response = try framing.Decoder.create()
     var incoming: u8[16640]
     while not response.finished():
-        let got = try tls.receive(&conn, &secrets, incoming)
+        let got = try tls.receive(conn, secrets, incoming)
         if got == 0: break
         try response.consume(incoming[..<got], output, method)
     try response.finish()
     return Response(status = response.status, length = response.count)
+
+## One bounded request using a directly pinned P-256 private issuer. This
+## compatibility API is intended for private/test servers.
+pub func fetch(host: str, port: u16, issuer_x: const u8[], issuer_y: const u8[],
+               method: str, target: str, authorization: str, content_type: str,
+               body: const u8[], output: u8[]) -> Response!:
+    var request: u8[8192]
+    let request_len = try encode_request(request, host, method, target, authorization, content_type, body)
+    var secrets = tls.Secrets()
+    var conn = try tls.connect(host, port, issuer_x, issuer_y, &secrets)
+    defer discard(conn.close() catch: recover ())
+    return try exchange(&conn, &secrets, request[..<request_len], method, body, output)
+
+## One bounded public HTTPS request under the built-in ISRG Root X2 anchor.
+pub func fetch_public(host: str, port: u16, method: str, target: str,
+                      authorization: str, content_type: str, body: const u8[],
+                      output: u8[]) -> Response!:
+    var request: u8[8192]
+    let request_len = try encode_request(request, host, method, target, authorization, content_type, body)
+    var secrets = tls.Secrets()
+    var conn = try tls.connect_public(host, port, &secrets)
+    defer discard(conn.close() catch: recover ())
+    return try exchange(&conn, &secrets, request[..<request_len], method, body, output)
+
+## One bounded HTTPS request under a caller-supplied P-384 trust anchor.
+pub func fetch_p384_chain(host: str, port: u16, root_x: const u8[], root_y: const u8[],
+                          method: str, target: str, authorization: str, content_type: str,
+                          body: const u8[], output: u8[]) -> Response!:
+    var request: u8[8192]
+    let request_len = try encode_request(request, host, method, target, authorization, content_type, body)
+    var secrets = tls.Secrets()
+    var conn = try tls.connect_p384_chain(host, port, root_x, root_y, &secrets)
+    defer discard(conn.close() catch: recover ())
+    return try exchange(&conn, &secrets, request[..<request_len], method, body, output)

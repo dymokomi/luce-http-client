@@ -2,8 +2,12 @@
 
 Native Luce Base HTTP/1.1 client. MIT OR Apache-2.0.
 Cleartext requests use numeric IPv4 addresses. The `https` export uses native
-TLS 1.3 with an explicitly supplied P-256 issuer pin; this is **not** general
-public-CA trust, and there is no redirect handling or connection pool.
+TLS 1.3. `https.fetch` retains an explicitly supplied P-256 issuer pin for
+private servers. `https.fetch_public` validates the complete public certificate
+path under the built-in ISRG Root X2 P-384 trust anchor; callers with another
+explicit P-384 anchor can use `https.fetch_p384_chain`. This is a deliberately
+bounded public profile rather than a system CA store. There is no redirect
+handling or connection pool.
 
 Cleartext `request`, `get` and `post` accept `timeout_ms` (default 30000) and an
 optional borrowed `net.Cancellation*`. One absolute deadline covers connection,

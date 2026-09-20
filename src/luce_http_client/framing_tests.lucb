@@ -58,5 +58,19 @@ pub func main(arguments: str[]) -> i32!:
         rejected = true
         recover https.Response())
     assert(rejected)
+    rejected = false
+    discard(https.fetch_public("invalid\r\nInjected: yes", 1, "GET", "/", "", "", b"", output) catch failure:
+        assert(failure.code == net.http_invalid)
+        rejected = true
+        recover https.Response())
+    assert(rejected)
+    var root: u8[48]
+    rejected = false
+    discard(https.fetch_p384_chain("invalid\r\nInjected: yes", 1, root, root,
+        "GET", "/", "", "", b"", output) catch failure:
+        assert(failure.code == net.http_invalid)
+        rejected = true
+        recover https.Response())
+    assert(rejected)
     print("PASS shared HTTP framing: fragmentation, truncation, chunks, limits and request injection")
     return 0
