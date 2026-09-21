@@ -1,0 +1,28 @@
+#prisma 4.0
+def package "luce-http-client" {
+    str owner = "dymokomi"
+    str version = "0.1.0"
+    str language = "luce-base"
+    str description = "Native Luce Base HTTP/1.1 client. MIT OR Apache-2.0. Cleartext requests use numeric IPv4 addresses. The https export uses native TLS 1.3. https.fetch retains an explicitly supplied P-256 issuer pin for private servers."
+    str readme = "README.md"
+
+    def export "http_client" {
+        str module = "luce_http_client.client"
+    }
+
+    def export "https" {
+        str module = "luce_http_client.secure"
+    }
+
+    def dependency "luce-tls" {
+        str owner = "dymokomi"
+        str version = "^0.1.0"
+        str path = "../luce-tls"
+    }
+
+    def dependency "luce-crypto" {
+        str owner = "dymokomi"
+        str version = "^0.1.0"
+        str path = "../luce-crypto"
+    }
+}
