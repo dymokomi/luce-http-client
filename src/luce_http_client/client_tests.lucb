@@ -1,8 +1,9 @@
 import http_client
 import net
+import sync
 import thread
 
-var cancellation: net.Cancellation
+var cancellation: sync.Cancellation
 
 func cancel_later(raw: void*?):
     discard(raw)
