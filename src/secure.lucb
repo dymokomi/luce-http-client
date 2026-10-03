@@ -1,8 +1,8 @@
 ## HTTP/1.1 over native TLS with either private issuer pinning or the strict
 ## public ISRG Root X2 certificate-chain profile.
-import session as tls
-import net
-import luce_http_client.framing as framing
+import luce_tls.session as tls
+import luce_std.net
+import framing
 
 pub let invalid = net.http_invalid
 

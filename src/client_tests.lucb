@@ -1,5 +1,5 @@
-import http_client
-import net
+import client as http_client
+import luce_std.net
 import sync
 import thread
 

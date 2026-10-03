@@ -1,9 +1,9 @@
 ## Ephemeral pinned-issuer TLS loopback; not public-CA or independent TLS interop.
-import https
-import session as tls
-import x509
-import crypto_native
-import net
+import secure as https
+import luce_tls.session as tls
+import luce_tls.x509
+import luce_crypto.native as crypto_native
+import luce_std.net
 import thread
 import c
 

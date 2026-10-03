@@ -1,5 +1,5 @@
 ## Shared bounded response framing, independent of socket/TLS record boundaries.
-import net
+import luce_std.net
 
 pub struct Decoder:
     var head: u8[32768]

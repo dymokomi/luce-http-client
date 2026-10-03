@@ -1,6 +1,6 @@
-import luce_http_client.framing as framing
-import https
-import net
+import framing
+import secure as https
+import luce_std.net
 
 func decode(wire: const u8[], stride: usize, output: u8[], method: str = "GET") -> usize!:
     var decoder = try framing.Decoder.create()

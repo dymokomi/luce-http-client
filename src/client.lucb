@@ -1,8 +1,8 @@
 ## Cleartext HTTP/1.1 client. Numeric IPv4 peers only. No DNS, TLS or redirects.
 import io
 import memory
-import net
-import luce_http_client.framing as framing
+import luce_std.net
+import framing
 import sync
 
 pub let invalid = net.http_invalid
