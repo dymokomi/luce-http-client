@@ -1,6 +1,6 @@
 import client as http_client
 import memory
-import luce_std.files
+from luce_std import files
 
 pub func main(arguments: str[]) -> i32!:
     assert(arguments.length == 2)
