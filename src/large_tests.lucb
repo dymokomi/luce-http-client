@@ -31,8 +31,9 @@ pub func main(arguments: str[]) -> i32!:
             rejected = true
             recover http_client.Result())
         assert(rejected)
-    let source = try files.read_limit("../luce-base/bootstrap/luce-base-arm64-macos.c", 33554432)
-    defer free(source) in memory.heap
+    let file = try files.read("../luce-base/bootstrap/luce-base-arm64-macos.c", limit = 33554432)
+    defer file.release()
+    let source = file.value
     assert(source.length > 1048576)
     let downloaded = try http_client.get(port, "/bootstrap", output)
     assert(downloaded.status == 200 and downloaded.count == source.length)
