@@ -38,7 +38,7 @@ pub func request(address: net.SocketAddress, method: str, target: str, host: str
     let duration = timeout_ms *? 1000000 else error(net.invalid_options, "HTTP timeout overflow")
     let deadline = try net.Deadline.after(duration)
     var conn = try net.Connection.connect(address, deadline = deadline, cancellation = cancellation, nonblocking = true)
-    defer discard(conn.close() catch: recover ())
+    defer _ = conn.close() catch: recover ()
     var stream = try net.DeadlineStream.over(&conn, deadline, cancellation)
     try io.write_all(&stream, encoded)
     if body.length > 0: try io.write_all(&stream, body)

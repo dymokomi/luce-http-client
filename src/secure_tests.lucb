@@ -17,12 +17,12 @@ var succeeded: @u64
 
 func serve() -> !:
     var listener = try net.Listener.bind(try net.resolve((c.str)"localhost", 0))
-    defer discard(listener.close() catch: recover ())
+    defer _ = listener.close() catch: recover ()
     port.store((u64)(try listener.address()).port, .release)
     ready.store(1, .release)
     for attempt in 0..<2:
         var conn = try listener.accept()
-        defer discard(conn.close() catch: recover ())
+        defer _ = conn.close() catch: recover ()
         var secrets = tls.Secrets()
         try tls.accept(&conn, "localhost", certificate[..<certificate_length], private_key, public_x, public_y, &secrets)
         var input: u8[16640]
@@ -37,16 +37,16 @@ func serve() -> !:
     succeeded.store(1, .release)
 
 func worker(raw: void*?):
-    discard(raw)
+    _ = raw
     serve() catch failure:
         print(failure.message)
         ready.store(2, .release)
 
 func join_pending(task: thread.Handle*, joined: bool*):
-    if not *joined: discard(task.join() catch: recover ())
+    if not *joined: _ = task.join() catch: recover ()
 
 pub func main(arguments: str[]) -> i32!:
-    discard(arguments)
+    _ = arguments
     try crypto_native.ecdsa_p256_keygen(private_key, public_x, public_y)
     defer crypto_native.wipe(private_key)
     certificate_length = try x509.mint_self_signed("localhost", private_key, public_x, public_y, certificate)
@@ -62,10 +62,10 @@ pub func main(arguments: str[]) -> i32!:
     let result = try https.fetch("localhost", (u16)port.load(.acquire), public_x, public_y, "GET", "/", "", "", b"", output)
     assert(result.status == 200 and result.length == 5 and (str)output[..<5] == "hello")
     var rejected = false
-    discard(https.fetch("localhost", (u16)port.load(.acquire), public_x, public_y, "GET", "/", "", "", b"", output) catch failure:
+    _ = https.fetch("localhost", (u16)port.load(.acquire), public_x, public_y, "GET", "/", "", "", b"", output) catch failure:
         assert(failure.code == net.http_invalid)
         rejected = true
-        recover https.Response())
+        recover https.Response()
     assert(rejected)
     try task.join()
     joined = true

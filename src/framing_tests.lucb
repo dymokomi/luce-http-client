@@ -17,14 +17,14 @@ func rejects(wire: const u8[]) -> !:
     var output: u8[16]
     for stride in [1, 7, 1024]:
         var rejected = false
-        discard(decode(wire, (usize)stride, output) catch failure:
-            discard(failure)
+        _ = decode(wire, (usize)stride, output) catch failure:
+            _ = failure
             rejected = true
-            recover 0)
+            recover 0
         assert(rejected)
 
 pub func main(arguments: str[]) -> i32!:
-    discard(arguments)
+    _ = arguments
     let fixed = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
     let chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2;foo=bar\r\nhe\r\n3\r\nllo\r\n0\r\nX-Test: yes\r\n\r\n"
     let eof = b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello"
@@ -53,24 +53,24 @@ pub func main(arguments: str[]) -> i32!:
     # Invalid request header must fail before DNS or any connection attempt.
     var key: u8[32]
     var rejected = false
-    discard(https.fetch("invalid\r\nInjected: yes", 1, key, key, "GET", "/", "", "", b"", output) catch failure:
+    _ = https.fetch("invalid\r\nInjected: yes", 1, key, key, "GET", "/", "", "", b"", output) catch failure:
         assert(failure.code == net.http_invalid)
         rejected = true
-        recover https.Response())
+        recover https.Response()
     assert(rejected)
     rejected = false
-    discard(https.fetch_public("invalid\r\nInjected: yes", 1, "GET", "/", "", "", b"", output) catch failure:
+    _ = https.fetch_public("invalid\r\nInjected: yes", 1, "GET", "/", "", "", b"", output) catch failure:
         assert(failure.code == net.http_invalid)
         rejected = true
-        recover https.Response())
+        recover https.Response()
     assert(rejected)
     var root: u8[48]
     rejected = false
-    discard(https.fetch_p384_chain("invalid\r\nInjected: yes", 1, root, root,
+    _ = https.fetch_p384_chain("invalid\r\nInjected: yes", 1, root, root,
         "GET", "/", "", "", b"", output) catch failure:
         assert(failure.code == net.http_invalid)
         rejected = true
-        recover https.Response())
+        recover https.Response()
     assert(rejected)
     print("PASS shared HTTP framing: fragmentation, truncation, chunks, limits and request injection")
     return 0

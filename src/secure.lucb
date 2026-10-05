@@ -57,7 +57,7 @@ pub func fetch(host: str, port: u16, issuer_x: const u8[], issuer_y: const u8[],
     let request_len = try encode_request(request, host, method, target, authorization, content_type, body)
     var secrets = tls.Secrets()
     var conn = try tls.connect(host, port, issuer_x, issuer_y, &secrets)
-    defer discard(conn.close() catch: recover ())
+    defer _ = conn.close() catch: recover ()
     return try exchange(&conn, &secrets, request[..<request_len], method, body, output)
 
 ## One bounded public HTTPS request under the built-in ISRG Root X2 anchor.
@@ -68,7 +68,7 @@ pub func fetch_public(host: str, port: u16, method: str, target: str,
     let request_len = try encode_request(request, host, method, target, authorization, content_type, body)
     var secrets = tls.Secrets()
     var conn = try tls.connect_public(host, port, &secrets)
-    defer discard(conn.close() catch: recover ())
+    defer _ = conn.close() catch: recover ()
     return try exchange(&conn, &secrets, request[..<request_len], method, body, output)
 
 ## One bounded HTTPS request under a caller-supplied P-384 trust anchor.
@@ -79,5 +79,5 @@ pub func fetch_p384_chain(host: str, port: u16, root_x: const u8[], root_y: cons
     let request_len = try encode_request(request, host, method, target, authorization, content_type, body)
     var secrets = tls.Secrets()
     var conn = try tls.connect_p384_chain(host, port, root_x, root_y, &secrets)
-    defer discard(conn.close() catch: recover ())
+    defer _ = conn.close() catch: recover ()
     return try exchange(&conn, &secrets, request[..<request_len], method, body, output)

@@ -6,7 +6,7 @@ import thread
 var cancellation: sync.Cancellation
 
 func cancel_later(raw: void*?):
-    discard(raw)
+    _ = raw
     thread.sleep(80)
     cancellation.request()
 
@@ -42,43 +42,43 @@ pub func main(arguments: str[]) -> i32!:
         assert((str)body[..<response.count] == "hello")
     for target in ["/truncated", "/bad-chunk", "/oversized"]:
         var rejected = false
-        discard(http_client.get(digits, target, body) catch failure:
-            discard(failure)
+        _ = http_client.get(digits, target, body) catch failure:
+            _ = failure
             rejected = true
-            recover http_client.Result())
+            recover http_client.Result()
         assert(rejected)
     for target in ["/stall", "/drip"]:
         var timed_out = false
-        discard(http_client.get(digits, target, body, timeout_ms = 150) catch failure:
+        _ = http_client.get(digits, target, body, timeout_ms = 150) catch failure:
             assert(failure.code == net.timed_out)
             timed_out = true
-            recover http_client.Result())
+            recover http_client.Result()
         assert(timed_out)
     var immediate = false
-    discard(http_client.get(digits, "/hello", body, timeout_ms = 0) catch failure:
+    _ = http_client.get(digits, "/hello", body, timeout_ms = 0) catch failure:
         assert(failure.code == net.timed_out)
         immediate = true
-        recover http_client.Result())
+        recover http_client.Result()
     assert(immediate)
     var overflow = false
-    discard(http_client.get(digits, "/hello", body, timeout_ms = 18446744073709551615) catch failure:
+    _ = http_client.get(digits, "/hello", body, timeout_ms = 18446744073709551615) catch failure:
         assert(failure.code == net.invalid_options)
         overflow = true
-        recover http_client.Result())
+        recover http_client.Result()
     assert(overflow)
     var worker = try thread.spawn(cancel_later, none, name = "http-cancel")
     var cancelled = false
-    discard(http_client.get(digits, "/stall", body, cancellation = &cancellation) catch failure:
+    _ = http_client.get(digits, "/stall", body, cancellation = &cancellation) catch failure:
         assert(failure.code == net.cancelled)
         cancelled = true
-        recover http_client.Result())
+        recover http_client.Result()
     try worker.join()
     assert(cancelled)
     var precancelled = false
-    discard(http_client.get(digits, "/hello", body, cancellation = &cancellation) catch failure:
+    _ = http_client.get(digits, "/hello", body, cancellation = &cancellation) catch failure:
         assert(failure.code == net.cancelled)
         precancelled = true
-        recover http_client.Result())
+        recover http_client.Result()
     assert(precancelled)
     let after = try http_client.get(digits, "/hello", body)
     assert(after.status == 200 and after.count == 5)

@@ -8,14 +8,14 @@ pub func main(arguments: str[]) -> i32!:
     for byte in arguments[1].bytes:
         assert(byte >= '0' and byte <= '9')
         port = port * 10 + (u16)(byte - '0')
-    let buffer = try alloc u8[http_client.max_response + 1] in memory.heap
+    let buffer = try new u8[http_client.max_response + 1] --- in memory.heap
     defer free(buffer) in memory.heap
     # Reject a larger output capacity before trying to connect.
     var rejected = false
-    discard(http_client.get(0, "/hello", buffer) catch failure:
+    _ = http_client.get(0, "/hello", buffer) catch failure:
         assert(failure.code == http_client.limit_exceeded)
         rejected = true
-        recover http_client.Result())
+        recover http_client.Result()
     assert(rejected)
     let output = buffer[..<http_client.max_response]
     for target in ["/large-fixed", "/large-chunked", "/large-eof", "/large-max"]:
@@ -26,10 +26,10 @@ pub func main(arguments: str[]) -> i32!:
     # A caller's smaller buffer stays a hard limit in every framing mode.
     for target in ["/large-fixed", "/large-chunked", "/large-eof"]:
         rejected = false
-        discard(http_client.get(port, target, output[..<4096]) catch failure:
+        _ = http_client.get(port, target, output[..<4096]) catch failure:
             assert(failure.code == http_client.limit_exceeded)
             rejected = true
-            recover http_client.Result())
+            recover http_client.Result()
         assert(rejected)
     let file = try files.read("../luce-base/bootstrap/luce-base-arm64-macos.c", limit = 33554432)
     defer file.release()

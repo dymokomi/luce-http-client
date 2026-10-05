@@ -10,14 +10,14 @@ pub struct Decoder:
     pub var status: u16
     pub var count: usize
 
-    pub static func create() -> Decoder!:
+    pub func create() -> Decoder!:
         return Decoder(body = try net.HttpBodyDecoder.create(net.HttpBodyKind.empty))
 
     pub func finished() -> bool:
         return self.ready and self.body.finished()
 
     ## Output must be the same buffer across calls. Discard all output on failure.
-    pub mutating func consume(data: const u8[], output: u8[], method: str) -> !:
+    pub func consume(data: const u8[], output: u8[], method: str) -> !:
         var at: usize = 0
         while at < data.length:
             if not self.ready:
@@ -53,6 +53,6 @@ pub struct Decoder:
                 self.count += step.body.length
                 at += step.consumed
 
-    pub mutating func finish() -> !:
+    pub func finish() -> !:
         if not self.ready: error(net.http_invalid, "incomplete HTTP response head")
         try self.body.finish()
