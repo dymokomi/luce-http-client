@@ -10,7 +10,7 @@ pub struct Decoder:
     pub var status: u16
     pub var count: usize
 
-    pub func create() -> Decoder!:
+    pub static func create() -> Decoder!:
         return Decoder(body = try net.HttpBodyDecoder.create(net.HttpBodyKind.empty))
 
     pub func finished() -> bool:
