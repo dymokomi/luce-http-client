@@ -1,0 +1,40 @@
+# The client against an independent origin: origin.py, Python's own HTTP server, serves
+# the fixtures (fixed, chunked and EOF bodies, truncations, slow and silent peers, the
+# 64 MiB bound, a tracked compiler bootstrap source), and the drivers under drivers/ talk
+# to it on the port it prints. `luc test` runs this with LUCE_BASE naming the compiler.
+from luce_std import files, paths, process
+import thread
+
+let failed = ErrorCode.package(1)
+
+pub func main(arguments: list[str]) -> int!:
+    let here = process.current_directory()
+    let base = process.variable("LUCE_BASE") else "luce-base"
+    let binaries = paths.join(paths.directory(paths.directory(here)), "build/tests/origin/drivers")
+    files.ensure_directory(binaries)
+    for name in ["client", "large"]:
+        let built = process.run(base, ["build", paths.join(here, f"drivers/{name}.lucb"), "--native", "-o", paths.join(binaries, name)], here)
+        if built.exit_code != 0:
+            error(failed, f"build {name}: {built.output}{built.error_output}")
+    with process.Command("python3", ["origin.py"], here) as origin:
+        var port = ""
+        for attempt in 0..<500:
+            let printed = origin.output()
+            if "\n" in printed:
+                port = printed.split("\n")[0].trim()
+                break
+            if origin.is_finished():
+                break
+            thread.sleep(20)
+        if port == "":
+            origin.cancel()
+            error(failed, f"the origin printed no port: {origin.output()}")
+        var failures = 0
+        for name in ["client", "large"]:
+            let ran = process.run(paths.join(binaries, name), [port], here)
+            print(ran.output.trim_end())
+            if ran.exit_code != 0:
+                print(f"FAIL {name}: exit status {ran.exit_code}\n{ran.error_output}")
+                failures += 1
+        origin.cancel()
+        return 1 if failures > 0 else 0

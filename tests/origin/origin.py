@@ -15,7 +15,7 @@ class Origin(BaseHTTPRequestHandler):
             self.close_connection = True
             try:
                 if self.path == '/bootstrap':
-                    source = Path(__file__).resolve().parents[2] / 'luce-base/bootstrap/luce-base-arm64-macos.c'
+                    source = Path(__file__).resolve().parents[3] / 'luce-base/bootstrap/luce-base-arm64-macos.c'
                     body = source.read_bytes()
                     self.wfile.write(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n\r\n' + body)
                     return

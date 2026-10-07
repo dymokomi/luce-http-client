@@ -42,11 +42,11 @@ Large-transfer fixtures compare every byte of 17 MiB fixed/chunked/EOF responses
 the exact 64 MiB bound, and upload/download of a real tracked compiler bootstrap
 source. Oversized output capacity and smaller-buffer overflow are rejected.
 The native HTTPS fixture uses ephemeral test credentials; it is not independent
-TLS interoperability evidence. All fixtures run in six compiler modes and under
-ASan/UBSan. No language sources are changed.
+TLS interoperability evidence. No language sources are changed.
 
 ```sh
-python3 tools/bootstrap.py
-python3 tests/run.py
-python3 tests/sanitize.py
+luc test
 ```
+
+`tests/framing` and `tests/secure` are self-contained; `tests/origin` starts the Python
+origin (`origin.py`) and runs the drivers in `tests/origin/drivers/` against it.
