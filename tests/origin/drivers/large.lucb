@@ -31,7 +31,7 @@ pub func main(arguments: str[]) -> i32!:
             rejected = true
             recover http_client.Result()
         assert(rejected)
-    let file = try files.read("../../../luce-base/bootstrap/luce-base-arm64-macos.c", limit = 33554432)
+    let file = try files.read("../luce-base/bootstrap/luce-base-arm64-macos.c", limit = 33554432)
     defer file.release()
     let source = file.value
     assert(source.length > 1048576)

@@ -8,9 +8,10 @@ import thread
 let failed = ErrorCode.package(1)
 
 pub func main(arguments: list[str]) -> int!:
-    let here = process.current_directory()
+    let top = process.current_directory()
+    let here = process.variable("LUC_TEST_DIR") else error(failed, "LUC_TEST_DIR names no test directory")
     let base = process.variable("LUCE_BASE") else "luce-base"
-    let binaries = paths.join(paths.directory(paths.directory(here)), "build/tests/origin/drivers")
+    let binaries = paths.join(top, "build/tests/origin/drivers")
     files.ensure_directory(binaries)
     for name in ["client", "large"]:
         let built = process.run(base, ["build", paths.join(here, f"drivers/{name}.lucb"), "--native", "-o", paths.join(binaries, name)], here)
@@ -31,7 +32,7 @@ pub func main(arguments: list[str]) -> int!:
             error(failed, f"the origin printed no port: {origin.output()}")
         var failures = 0
         for name in ["client", "large"]:
-            let ran = process.run(paths.join(binaries, name), [port], here)
+            let ran = process.run(paths.join(binaries, name), [port], top)
             print(ran.output.trim_end())
             if ran.exit_code != 0:
                 print(f"FAIL {name}: exit status {ran.exit_code}\n{ran.error_output}")
